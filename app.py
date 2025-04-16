@@ -1,82 +1,87 @@
-from flask import Flask, render_template, request, redirect, url_for
-import sqlalchemy
-from sqlalchemy import create_engine, Column, Integer, String, Text, DateTime
-from sqlalchemy.ext.declarative import declarative_base
-from sqlalchemy.orm import sessionmaker
+from flask import Flask, render_template, request, redirect, url_for, flash
+import pymysql
 from datetime import datetime
 import os
 
 app = Flask(__name__)
+app.secret_key = 'your_secret_key_here'
 
-# Підключення до Cloud SQL
-def init_connection_engine():
-    db_config = {
-        "pool_size": 5,
-        "max_overflow": 2,
-        "pool_timeout": 30,
-        "pool_recycle": 1800,
-    }
+# Database Configuration
+def get_db_connection():
+    return pymysql.connect(
+        host=os.getenv('DB_HOST', 'localhost'),
+        user=os.getenv('DB_USER', 'root'),
+        password=os.getenv('DB_PASS', ''),
+        database=os.getenv('DB_NAME', 'todo_app'),
+        cursorclass=pymysql.cursors.DictCursor
+    )
 
-    if os.environ.get("DB_HOST"):
-        # Для Cloud SQL
-        return create_engine(
-            sqlalchemy.engine.url.URL.create(
-                drivername="mysql+pymysql",
-                username=os.environ["DB_USER"],
-                password=os.environ["DB_PASS"],
-                database=os.environ["DB_NAME"],
-                host=os.environ["DB_HOST"],
-            ),
-            **db_config
+# Create table if not exists
+with get_db_connection() as conn:
+    with conn.cursor() as cursor:
+        cursor.execute("""
+        CREATE TABLE IF NOT EXISTS tasks (
+            id INT AUTO_INCREMENT PRIMARY KEY,
+            title VARCHAR(100) NOT NULL,
+            description TEXT,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         )
-    else:
-        # Для локального тестування (використовуйте тільки для розробки)
-        return create_engine("sqlite:///todo.db")
-
-engine = init_connection_engine()
-Base = declarative_base()
-Session = sessionmaker(bind=engine)
-
-# Модель даних
-class Task(Base):
-    __tablename__ = "tasks"
-    
-    id = Column(Integer, primary_key=True)
-    title = Column(String(100), nullable=False)
-    description = Column(Text)
-    created_at = Column(DateTime, default=datetime.utcnow)
-
-# Створюємо таблицю
-Base.metadata.create_all(engine)
+        """)
+    conn.commit()
 
 @app.route('/')
 def index():
-    session = Session()
-    tasks = session.query(Task).order_by(Task.created_at.desc()).all()
-    session.close()
+    with get_db_connection() as conn:
+        with conn.cursor() as cursor:
+            cursor.execute("SELECT * FROM tasks ORDER BY created_at DESC")
+            tasks = cursor.fetchall()
     return render_template('index.html', tasks=tasks)
 
 @app.route('/add', methods=['POST'])
 def add_task():
-    session = Session()
-    new_task = Task(
-        title=request.form['title'],
-        description=request.form['description']
-    )
-    session.add(new_task)
-    session.commit()
-    session.close()
+    title = request.form['title']
+    description = request.form['description']
+    
+    with get_db_connection() as conn:
+        with conn.cursor() as cursor:
+            cursor.execute(
+                "INSERT INTO tasks (title, description) VALUES (%s, %s)",
+                (title, description)
+            )
+        conn.commit()
+    flash('Task added successfully!', 'success')
     return redirect(url_for('index'))
+
+@app.route('/edit/<int:task_id>', methods=['GET', 'POST'])
+def edit_task(task_id):
+    if request.method == 'POST':
+        title = request.form['title']
+        description = request.form['description']
+        
+        with get_db_connection() as conn:
+            with conn.cursor() as cursor:
+                cursor.execute(
+                    "UPDATE tasks SET title=%s, description=%s WHERE id=%s",
+                    (title, description, task_id)
+                )
+            conn.commit()
+        flash('Task updated successfully!', 'success')
+        return redirect(url_for('index'))
+    
+    with get_db_connection() as conn:
+        with conn.cursor() as cursor:
+            cursor.execute("SELECT * FROM tasks WHERE id = %s", (task_id,))
+            task = cursor.fetchone()
+    return render_template('edit.html', task=task)
 
 @app.route('/delete/<int:task_id>')
 def delete_task(task_id):
-    session = Session()
-    task = session.query(Task).get(task_id)
-    if task:
-        session.delete(task)
-        session.commit()
-    session.close()
+    with get_db_connection() as conn:
+        with conn.cursor() as cursor:
+            cursor.execute("DELETE FROM tasks WHERE id = %s", (task_id,))
+        conn.commit()
+    flash('Task deleted successfully!', 'success')
     return redirect(url_for('index'))
 
 if __name__ == '__main__':
-    app.run(host='0.0.0.0', port=int(os.environ.get('PORT', 8080)))
+    app.run(host='0.0.0.0', port=8080, debug=True)

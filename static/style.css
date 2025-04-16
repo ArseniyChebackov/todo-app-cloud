@@ -119,3 +119,19 @@ li strong {
 .edit:hover, .delete:hover, .cancel:hover {
     opacity: 0.8;
 }
+
+.alert {
+    padding: 10px;
+    margin-bottom: 15px;
+    border-radius: 4px;
+}
+
+.alert-success {
+    background-color: #dff0d8;
+    color: #3c763d;
+}
+
+.alert-error {
+    background-color: #f2dede;
+    color: #a94442;
+}
