@@ -1,35 +1,55 @@
+import os
+import sys
 from flask import Flask, render_template, request, redirect, url_for, flash
 import pymysql
 from datetime import datetime
-import os
 
 app = Flask(__name__)
-app.secret_key = 'your_secret_key_here'
+app.secret_key = 'dev'  # Change for production!
 
-# Database Configuration
 def get_db_connection():
-    db_host = os.getenv('DB_HOST')
+    db_host = os.getenv('DB_HOST', 'localhost')  # Default to localhost for Windows
     
-    if db_host.startswith('/cloudsql/'):
-        # Cloud SQL Proxy connection
+    # Windows/Linux detection
+    is_windows = sys.platform.startswith('win')
+    
+    if db_host.startswith('/cloudsql/') and not is_windows:
+        # Cloud SQL Proxy connection (Linux/Cloud)
         return pymysql.connect(
             unix_socket=db_host,
-            user=os.getenv('DB_USER', 'root'),
-            password=os.getenv('DB_PASS', ''),
-            database=os.getenv('DB_NAME', 'todo_app'),
+            user='root',
+            password='',
+            database='todo_app',
             cursorclass=pymysql.cursors.DictCursor
         )
     else:
-        # Standard TCP connection
+        # Standard TCP connection (Windows/Local)
         return pymysql.connect(
             host=db_host,
-            user=os.getenv('DB_USER', 'root'),
-            password=os.getenv('DB_PASS', ''),
-            database=os.getenv('DB_NAME', 'todo_app'),
+            user='root',
+            password='',
+            database='todo_app',
             cursorclass=pymysql.cursors.DictCursor
         )
 
-# Create table if not exists
+# Initialize table only if not exists
+try:
+    with get_db_connection() as conn:
+        with conn.cursor() as cursor:
+            cursor.execute("""
+            CREATE TABLE IF NOT EXISTS tasks (
+                id INT AUTO_INCREMENT PRIMARY KEY,
+                title VARCHAR(100) NOT NULL,
+                description TEXT,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+            """)
+        conn.commit()
+except Exception as e:
+    print(f"Database initialization error: {e}")
+
+
+# Initialize database table
 with get_db_connection() as conn:
     with conn.cursor() as cursor:
         cursor.execute("""
@@ -62,7 +82,7 @@ def add_task():
                 (title, description)
             )
         conn.commit()
-    flash('Task added successfully!', 'success')
+    flash('Task added!', 'success')
     return redirect(url_for('index'))
 
 @app.route('/edit/<int:task_id>', methods=['GET', 'POST'])
@@ -78,7 +98,7 @@ def edit_task(task_id):
                     (title, description, task_id)
                 )
             conn.commit()
-        flash('Task updated successfully!', 'success')
+        flash('Task updated!', 'success')
         return redirect(url_for('index'))
     
     with get_db_connection() as conn:
@@ -93,8 +113,8 @@ def delete_task(task_id):
         with conn.cursor() as cursor:
             cursor.execute("DELETE FROM tasks WHERE id = %s", (task_id,))
         conn.commit()
-    flash('Task deleted successfully!', 'success')
+    flash('Task deleted!', 'success')
     return redirect(url_for('index'))
 
 if __name__ == '__main__':
-    app.run(host='0.0.0.0', port=8080, debug=True)
+    app.run(host='0.0.0.0', port=int(os.environ.get('PORT', 8080)), debug=True)
