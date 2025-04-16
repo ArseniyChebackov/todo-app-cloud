@@ -1,0 +1,41 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>To-Do App</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+    <div class="container">
+        <h1>To-Do List</h1>
+        
+        {% with messages = get_flashed_messages(with_categories=true) %}
+            {% if messages %}
+                {% for category, message in messages %}
+                    <div class="alert alert-{{ category }}">{{ message }}</div>
+                {% endfor %}
+            {% endif %}
+        {% endwith %}
+        
+        <form action="/add" method="post">
+            <input type="text" name="title" placeholder="Task title" required>
+            <textarea name="description" placeholder="Task description"></textarea>
+            <button type="submit">Add Task</button>
+        </form>
+        
+        <ul>
+            {% for task in tasks %}
+            <li>
+                <strong>{{ task.title }}</strong>
+                {% if task.description %}
+                <p>{{ task.description }}</p>
+                {% endif %}
+                <div class="actions">
+                    <a href="/edit/{{ task.id }}" class="edit">Edit</a>
+                    <a href="/delete/{{ task.id }}" class="delete">Delete</a>
+                </div>
+            </li>
+            {% endfor %}
+        </ul>
+    </div>
+</body>
+</html>
