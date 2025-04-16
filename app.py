@@ -8,13 +8,26 @@ app.secret_key = 'your_secret_key_here'
 
 # Database Configuration
 def get_db_connection():
-    return pymysql.connect(
-        host=os.getenv('DB_HOST', 'localhost'),
-        user=os.getenv('DB_USER', 'root'),
-        password=os.getenv('DB_PASS', ''),
-        database=os.getenv('DB_NAME', 'todo_app'),
-        cursorclass=pymysql.cursors.DictCursor
-    )
+    db_host = os.getenv('DB_HOST')
+    
+    if db_host.startswith('/cloudsql/'):
+        # Cloud SQL Proxy connection
+        return pymysql.connect(
+            unix_socket=db_host,
+            user=os.getenv('DB_USER', 'root'),
+            password=os.getenv('DB_PASS', ''),
+            database=os.getenv('DB_NAME', 'todo_app'),
+            cursorclass=pymysql.cursors.DictCursor
+        )
+    else:
+        # Standard TCP connection
+        return pymysql.connect(
+            host=db_host,
+            user=os.getenv('DB_USER', 'root'),
+            password=os.getenv('DB_PASS', ''),
+            database=os.getenv('DB_NAME', 'todo_app'),
+            cursorclass=pymysql.cursors.DictCursor
+        )
 
 # Create table if not exists
 with get_db_connection() as conn:
